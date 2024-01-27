@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Book Review Website{% endblock %}</title>
+    <!-- Include CSS and JS files -->
+</head>
+<body>
+    <header>
+        {% if current_user.is_authenticated %}
+            <nav>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('search') }}">Search</a>
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </nav>
+            <p>Welcome, {{ current_user.username }}!</p>
+        {% else %}
+            <nav>
+                <a href="{{ url_for('login') }}">Login</a>
+                <a href="{{ url_for('register') }}">Register</a>
+            </nav>
+        {% endif %}
+    </header>
+
+    {% block content %}{% endblock %}
+
+    <footer>Copyright © Your Book Review Website</footer>
+</body>
+</html>

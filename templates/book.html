@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ book.title }}{% endblock %}
+
+{% block content %}
+    <h1>{{ book.title }}</h1>
+    <p>Author: {{ book.author }}</p>
+    <p>Publication Year: {{ book.publication_year }}</p>
+    <p>ISBN: {{ book.isbn }}</p>
+
+    {% for review in reviews %}
+        <div class="review">
+            <p>{{ review.content }}</p>
+            <p>— {{ review.user.username }}, Rating: {{ review.rating }}</p>
+        </div>
+    {% endfor %}
+
+    <h2>Add a Review</h2>
+    <form action="{{ url_for('add_review', isbn=book.isbn) }}" method="post">
+        {{ review_form.csrf_token }}
+        {{ review_form.rating.label }} {{ review_form.rating(class_='form-control') }}<br>
+        {{ review_form.content.label }} {{ review_form.content(class_='form-control') }}<br>
+        <input type="submit" value="Submit Review">
+    </form>
+{% endblock %}
