@@ -2,8 +2,10 @@ Flask
 Flask-Session
 psycopg2-binary
 SQLAlchemy
-Flask-SQLAlchemy==2.5.1
+Flask-SQLAlchemy
 Flask-WTF==0.15.1
 requests==2.31.0
+
+
 
 
