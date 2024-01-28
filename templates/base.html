@@ -28,3 +28,18 @@
     <footer>Copyright © Your Book Review Website</footer>
 </body>
 </html>
+
+
+from sqlalchemy import Column, Integer, String, DateTime, MetaData, Table
+from sqlalchemy.ext.declarative import declarative_base
+
+# SQLAlchemy Base
+Base = declarative_base()
+
+# Now Column and other classes are available
+class User(Base, UserMixin):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True)
+    username = Column(String(80), unique=True, nullable=False)
+    password_hash = Column(String(128), nullable=False)  # Assuming you have implemented password hashing
+    registered_on = Column(DateTime, nullable=False, default=datetime.utcnow)
