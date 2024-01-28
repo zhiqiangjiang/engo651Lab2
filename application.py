@@ -1,19 +1,17 @@
 
 import os
-#from flask import Flask, session
 from flask_session import Session
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine,Column, Integer, String, DateTime, MetaData, Table,text
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, MetaData, Table
 from sqlalchemy.ext.declarative import declarative_base
-
-from flask import Flask, render_template, request, session, redirect
-#from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, render_template, request, session, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from forms import RegistrationForm, LoginForm, SearchForm, ReviewForm
+from sqlalchemy.exc import IntegrityError
+from werkzeug.security import generate_password_hash,check_password_hash
 
-#import psycopg2
 #app = Flask(__name__)
 app = Flask(__name__, template_folder='templates')
 
@@ -24,6 +22,8 @@ if not os.getenv("DATABASE_URL"):
 # Configure session to use filesystem
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
+app.config['SECRET_KEY'] = 'mysecretkey'  
+
 Session(app)
 
 # Set up database
@@ -35,12 +35,7 @@ login_manager.login_view = 'login'
 
 # SQLAlchemy Base
 Base = declarative_base()
-# # User model with Flask-Login integration
-# class User(UserMixin):
-#     id = db.Column(db.Integer, primary_key=True)
-#     username = db.Column(db.String(80), unique=True, nullable=False)
-#     password = db.Column(db.String(120), nullable=False)
-#     registered_on = db.Column(db.DateTime, nullable=False)
+
 # User model with Flask-Login integration
 class User(Base, UserMixin):
     __tablename__ = 'users'
@@ -61,28 +56,63 @@ def load_user(user_id):
 def index():
     return render_template('base.html')
 
-
-
-#app = Flask(__name__)
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:password@localhost/bookreview'
-#app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-#app.config['SECRET_KEY'] = 'your_secret_key_here'
-#db = SQLAlchemy(app)
-
-
-# ... (User model and registration/login routes similar to previous examples)
-
 # Search route
 @app.route('/search', methods=['GET', 'POST'])
 def search():
-    if request.method == 'POST':
-        query = '%' + request.form.get('query') + '%'
-        result_proxy = db.engine.execute("""
-            SELECT * FROM books 
-            WHERE isbn LIKE %s OR title LIKE %s OR author LIKE %s
-        """, (query, query, query))
-        books = result_proxy.fetchall()
-    return render_template('search_results.html', books=books)
+    form = SearchForm()
+    books = []
+
+    if form.validate_on_submit():
+        isbn = form.isbn.data
+        title = form.title.data
+        author = form.author.data
+        year = form.year.data
+
+        if not (isbn or title or author or year):
+            flash("Please fill in at least one field.")
+            return render_template('search.html', form=form)
+
+        # Build the WHERE clause dynamically based on the input
+        conditions = []
+        params = {}
+
+        if isbn:
+            conditions.append("books.isbn = :isbn")
+            params["isbn"] = isbn
+
+        if title:
+            conditions.append("books.title LIKE :title")
+            params["title"] = f"%{title}%"
+
+        if author:
+            conditions.append("books.author LIKE :author")
+            params["author"] = f"%{author}%"
+        if year:
+            conditions.append("books.year = :year")
+            params["year"] = year
+
+        # Combine the conditions
+        if conditions:
+            where_clause = " AND ".join(conditions)
+        else:
+            # If no conditions are present, we cannot perform a search
+            return render_template('search.html', form=form)
+
+        # Execute the raw SQL query
+        query = text(f"""
+            SELECT * FROM books
+            WHERE {where_clause}
+        """)
+
+        result = db.execute(query, params)
+      
+        # Convert the result to a list of dictionaries
+        #print(result)
+        books = [{'isbn': row[0], 'title': row[1], 'author': row[2], 'year':row[3]} for row in result]
+
+        return render_template('search_results.html', books=books, form=form)
+
+    return render_template('search.html', form=form)
 
 # Book detail route
 @app.route('/book/<isbn>')
@@ -93,44 +123,78 @@ def book_detail(isbn):
     book = result_proxy.fetchone()
     # Fetch reviews from a separate Reviews table (omitted for brevity)
     return render_template('book_detail.html', book=book)
+
+
+ 
 # Register route
+import hashlib
+import bcrypt  
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    form = RegistrationForm()
 
-        # Check if username already exists
-        result = db.engine.execute("SELECT * FROM users WHERE username = %s", (username,))
+    if form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
+
+        # Hash the password 
+        #password_hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        password_hashed = generate_password_hash(password, method='pbkdf2:sha256')
+
+        # Execute a raw SQL query to check if the username already exists
+        result = db.execute(text("SELECT * FROM users WHERE username = :username"), {"username": username})
         existing_user = result.fetchone()
+
         if existing_user:
-            return "Username already exists!"
+            # Username already exists
+            return render_template('register.html', form=form, error_message="Your input username already taken.")
+        
+        # Get the current timestamp
+        registered_on = datetime.now()
 
-        # Insert new user
-        db.engine.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, password))
-        conn.commit()
+        # Insert the new user with the hashed password and the current timestamp
+        insert_query = text("""
+            INSERT INTO users (username, password_hash, registered_on)
+            VALUES (:username, :password_hash, :registered_on)
+        """)
+        db.execute(insert_query, {
+            "username": username,
+            "password_hash": password_hashed,
+            "registered_on": registered_on
+        })
+        
+        # Commit the transaction
+        db.commit()
+        flash("User registered successfully!")
+        # Redirect to login page
+        return render_template('login.html', form=form)
 
-        return redirect(url_for('login'))
-
-    return render_template('register.html')
+    return render_template('register.html', form=form)
 
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    form = LoginForm()
 
-        # Authenticate user
-        result = db.engine.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
-        authenticated_user = result.fetchone()
-        if authenticated_user:
-            session['user_id'] = authenticated_user[0]
+    if form.validate_on_submit():
+        # Fetch the user based on the entered username
+        #user = User.query.filter_by(username=form.username.data).first()
+        user = db.query(User).filter_by(username=form.username.data).first()
+
+        # Check if the user exists and the password matches
+        if user and check_password_hash(user.password_hash, form.password.data):
+            # Successful login logic, e.g., log the user in, set session, etc.
+            flash('Logged in successfully!')
             return redirect(url_for('search'))
+            #return render_template('search.html', form=form)
 
-        return "Invalid credentials!"
 
-    return render_template('login.html')
+        else:
+            # Invalid credentials
+            flash('Invalid username or password.')
+
+    return render_template('login.html', form=form)
 
 # Logout route
 @app.route('/logout')

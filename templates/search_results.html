@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Search Results</h2>
+
+{% if books %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>ISBN</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Year</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for book in books %}
+        <tr>
+            <td>{{ book.isbn }}</td>
+            <td>{{ book.title }}</td>
+            <td>{{ book.author }}</td>
+            <td>{{ book.year }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No books found matching your search criteria.</p>
+{% endif %}
+
+<br>
+
+<!-- Repopulate the form for subsequent searches -->
+<form method="POST" action="{{ url_for('search') }}">
+    {{ form.csrf_token }}
+    {{ form.isbn.label }} {{ form.isbn(class_='form-control') }}<br>
+    {{ form.title.label }} {{ form.title(class_='form-control') }}<br>
+    {{ form.author.label }} {{ form.author(class_='form-control') }}<br>
+    {{ form.year.label }} {{ form.author(class_='form-control') }}<br>
+    {{ form.submit(class_='btn btn-primary') }}
+</form>
+
+{% endblock %}
