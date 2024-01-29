@@ -60,7 +60,6 @@ def register():
         password = form.password.data
 
         # Hash the password 
-        #password_hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         password_hashed = generate_password_hash(password, method='pbkdf2:sha256')
 
         # Execute a raw SQL query to check if the username already exists
