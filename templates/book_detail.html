@@ -1,24 +1,35 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>{{ book.title }}</h1>
+<h1><strong>Title:</strong> {{ book.title }}</h1>
 <p><strong>Author:</strong> {{ book.author }}</p>
 <p><strong>Publication Year:</strong> {{ book.year }}</p>
 <p><strong>ISBN:</strong> {{ book.isbn }}</p>
 
 <h2>Reviews</h2>
-{% for review in reviews %}
-    <div class="review">
-        <p><strong>Rating:</strong> {{ review.rating }}</p>
-        <p>{{ review.comment }}</p>
-    </div>
-{% else %}
-    <p>No reviews found.</p>
-{% endfor %}
-
-<h2>Add a Review</h2>
+<table class="review-table">
+    <thead>
+        <tr>
+            <th>Rating</th>
+            <th>Review Content</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for review in reviews %}
+            <tr>
+                <td>{{ review.rating }}</td>
+                <td>{{ review.content }}</td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="2">No reviews found.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<h2>Add Your Review</h2>
 <form action="{{ url_for('book_detail.add_review', isbn=book.isbn) }}" method="POST">
     {{ review_form.csrf_token }}
-    {{ review_form.content.label }} {{ review_form.content(rows=5) }}<br>
+    {{ review_form.content.label }} {{ review_form.content(rows=2) }}<br>
     {{ review_form.rating.label }} {{ review_form.rating }}<br>
     <input type="submit" value="Submit Review">
 </form>

@@ -1,17 +1,30 @@
 {% extends 'base.html' %}
 {% block content %}
 <h1>Search Results</h1>
-{% if books %}
-<ul>
-  {% for book in books %}
-    <li>
-      <a href="{{ url_for('book_detail.book_detail', isbn=book.isbn) }}">
-        {{ book.title }} by {{ book.author }} in {{ book.year }}
-      </a>
-    </li>
-  {% endfor %}
-</ul>
-{% else %}
-<p>No books found matching your search criteria.</p>
-{% endif %}
+<table>
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Author</th>
+        <th>Year</th>
+        <th>ISBN</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if books %}
+        {% for book in books %}
+          <tr>
+            <td><a href="{{ url_for('book_detail.book_detail', isbn=book.isbn) }}">{{ book.title }}</a></td>
+            <td>{{ book.author }}</td>
+            <td>{{ book.year }}</td>
+            <td>{{ book.isbn }}</td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="4">No books found matching your search criteria.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
 {% endblock %}

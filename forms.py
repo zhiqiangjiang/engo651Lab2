@@ -20,7 +20,6 @@ class SearchForm(FlaskForm):
     isbn = StringField('ISBN')
     title = StringField('Title')
     author = StringField('Author')
-    year = IntegerField('Year')
     submit = SubmitField("Search")
 
 

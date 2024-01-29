@@ -47,77 +47,10 @@ db = scoped_session(sessionmaker(bind=engine))
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
-
-@app.route("/")
-# def index():
-#     return "Project 1: TODO"
-def index():
-    return render_template('base.html')
-
-# Search route
-@app.route('/search', methods=['GET', 'POST'])
-def search():
-    form = SearchForm()
-    books = []
-
-    if form.validate_on_submit():
-        isbn = form.isbn.data
-        title = form.title.data
-        author = form.author.data
-        year = form.year.data
-
-        if not (isbn or title or author or year):
-            flash("Please fill in at least one field.")
-            return render_template('search.html', form=form)
-
-        # Build the WHERE clause dynamically based on the input
-        conditions = []
-        params = {}
-
-        if isbn:
-            conditions.append("books.isbn = :isbn")
-            params["isbn"] = isbn
-
-        if title:
-            conditions.append("books.title LIKE :title")
-            params["title"] = f"%{title}%"
-
-        if author:
-            conditions.append("books.author LIKE :author")
-            params["author"] = f"%{author}%"
-        if year:
-            conditions.append("books.year = :year")
-            params["year"] = year
-
-        # Combine the conditions
-        if conditions:
-            where_clause = " AND ".join(conditions)
-        else:
-            # If no conditions are present, we cannot perform a search
-            return render_template('search.html', form=form)
-
-        # Execute the raw SQL query
-        query = text(f"""
-            SELECT * FROM books
-            WHERE {where_clause}
-        """)
-
-        result = db.execute(query, params)
-      
-        # Convert the result to a list of dictionaries
-        #print(result)
-        books = [{'isbn': row[0], 'title': row[1], 'author': row[2], 'year':row[3]} for row in result]
-
-        return render_template('search_results.html', books=books, form=form)
-
-    return render_template('search.html', form=form)
-
+    return db.query(User).get(int(user_id))
 
 # Register route
 import hashlib
-import bcrypt  
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegistrationForm()
@@ -173,7 +106,10 @@ def login():
         # Check if the user exists and the password matches
         if user and check_password_hash(user.password_hash, form.password.data):
             # Successful login logic, e.g., log the user in, set session, etc.
-            flash('Logged in successfully!')
+            login_user(user)
+            session['user_id'] = user.id
+
+            #flash('Logged in successfully!')
             return redirect(url_for('search'))
             #return render_template('search.html', form=form)
 
@@ -187,8 +123,71 @@ def login():
 # Logout route
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None)
+    session.clear()
+    logout_user()
     return redirect(url_for('login'))
+
+# Index route
+@app.route("/")
+def index():
+    return render_template('base.html')
+
+# Search route
+@app.route('/search', methods=['GET', 'POST'])
+def search():
+    form = SearchForm()
+    books = []
+
+    if form.validate_on_submit():
+        isbn = form.isbn.data
+        title = form.title.data
+        author = form.author.data
+
+        if not (isbn or title or author):
+            flash("Please fill in at least one field.")
+            return render_template('search.html', form=form)
+
+        # Build the WHERE clause dynamically based on the input
+        conditions = []
+        params = {}
+
+        if isbn:
+            conditions.append("books.isbn = :isbn")
+            params["isbn"] = isbn
+
+        if title:
+            conditions.append("books.title LIKE :title")
+            params["title"] = f"%{title}%"
+
+        if author:
+            conditions.append("books.author LIKE :author")
+            params["author"] = f"%{author}%"
+        
+
+        # Combine the conditions
+        if conditions:
+            where_clause = " AND ".join(conditions)
+        else:
+            # If no conditions are present, we cannot perform a search
+            return render_template('search.html', form=form)
+
+        # Execute the raw SQL query
+        query = text(f"""
+            SELECT * FROM books
+            WHERE {where_clause}
+        """)
+
+        result = db.execute(query, params)
+      
+        # Convert the result to a list of dictionaries
+        #print(result)
+        books = [{'isbn': row[0], 'title': row[1], 'author': row[2], 'year':row[3]} for row in result]
+
+        return render_template('search_results.html', books=books, form=form)
+
+    return render_template('search.html', form=form)
+
+
 
 # Book detail route
 bp = Blueprint('book_detail', __name__)
@@ -262,21 +261,5 @@ if __name__ == '__main__':
     app.run(debug=True)
 
 
-
-# @app.route('/get_book_details/<isbn>')
-# @login_required
-# def get_book_details(isbn):
-#     # Use Google Books API to fetch additional data
-#     api_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}"
-#     response = get(api_url)
-#     data = response.json()
-    
-#     if data['totalItems'] > 0:
-#         book_data = data['items'][0]['volumeInfo']
-#         # Process book_data and merge with your local book details
-#     else:
-#         book_data = None
-
-#     return render_template('book_details.html', book_data=book_data)
 
 
