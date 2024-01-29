@@ -1,5 +1,5 @@
-# Project 1
-Book Review Website Project Description: 
+# Project 1: Book Review Website 
+Project Description: 
 This project is a Flask-based web application for users to browse books, post reviews, and register/login/logout account. 
 
 File Structure & Explanation:
