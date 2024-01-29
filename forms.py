@@ -30,5 +30,6 @@ class SearchForm(FlaskForm):
 
 class ReviewForm(FlaskForm):
     rating = IntegerField("Rating (1-5)", validators=[InputRequired(), NumberRange(min=1, max=5)])
-    content = TextAreaField("Review", validators=[InputRequired(), Length(min=10)])
+    content = TextAreaField("Your Review", validators=[InputRequired()])
     submit = SubmitField("Submit Review")
+   

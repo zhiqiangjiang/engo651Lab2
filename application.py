@@ -2,11 +2,10 @@
 import os
 from flask_session import Session
 from sqlalchemy import create_engine,Column, Integer, String, DateTime, MetaData, Table,text
-from sqlalchemy.orm import scoped_session, sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from datetime import datetime
 from sqlalchemy.ext.declarative import declarative_base
-from flask import Flask, render_template, request, session, redirect, url_for, flash
+from flask import Flask, render_template, request, session, redirect, url_for, flash, Blueprint
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from forms import RegistrationForm, LoginForm, SearchForm, ReviewForm
 from sqlalchemy.exc import IntegrityError
@@ -114,18 +113,7 @@ def search():
 
     return render_template('search.html', form=form)
 
-# Book detail route
-@app.route('/book/<isbn>')
-def book_detail(isbn):
-    result_proxy = db.engine.execute("""
-        SELECT * FROM books WHERE isbn = %s
-    """, (isbn,))
-    book = result_proxy.fetchone()
-    # Fetch reviews from a separate Reviews table (omitted for brevity)
-    return render_template('book_detail.html', book=book)
 
-
- 
 # Register route
 import hashlib
 import bcrypt  
@@ -202,24 +190,73 @@ def logout():
     session.pop('user_id', None)
     return redirect(url_for('login'))
 
-# Add review route
-@app.route('/book/<isbn>/add_review', methods=['POST'])
+# Book detail route
+bp = Blueprint('book_detail', __name__)
+@bp.route('/book/<string:isbn>')
+def book_detail(isbn):
+    # Query for book details
+    book_query = text("""
+        SELECT isbn, title, author, year
+        FROM books
+        WHERE isbn = :isbn
+    """)
+    book_result = db.execute(book_query, {'isbn': isbn}).fetchone()
+
+    # Check if book exists
+    # if book_result is None:
+    #     abort(404)
+
+    book_details = {'isbn': book_result[0], 'title': book_result[1], 'author': book_result[2], 'year':book_result[3]}
+    
+    # Instantiate the ReviewForm
+    review_form = ReviewForm()
+
+
+    # Query for book reviews
+    reviews_query = text("""
+        SELECT rating, content
+        FROM reviews
+        WHERE book_isbn = :isbn
+    """)
+    reviews_result = db.execute(reviews_query, {'isbn': isbn}).fetchall()
+
+    reviews = [{'rating':row[0],'content':row[1]} for row in reviews_result]
+
+    return render_template('book_detail.html', book=book_details, reviews=reviews,review_form=review_form)
+ 
+# Add Review route
+@bp.route('/book/<string:isbn>/add_review', methods=['POST'])
+@login_required # This ensures that only logged in users can access this route
 def add_review(isbn):
-    if 'user_id' in session:
-        user_id = session['user_id']
+    form = ReviewForm()
+    if form.validate_on_submit():
+        # Process the form data and add the review to the database using the isbn
+      
+        user_id = current_user.get_id()
         rating = request.form['rating']
-        comment = request.form['comment']
-
+        content = request.form['content']
+        # Get the current timestamp
+        created_on = datetime.now()
         # Insert review into Reviews table (assuming it has user_id, isbn, rating, comment columns)
-        db.engine.execute("INSERT INTO reviews (user_id, isbn, rating, comment) VALUES (%s, %s, %s, %s)",
-                          (user_id, isbn, rating, comment))
-        conn.commit()
+        query = text("""
+        INSERT INTO reviews (user_id, book_isbn, rating, content, created_on)
+        VALUES (:user_id, :book_isbn, :rating, :content, :created_on)   """)
+       
+        db.execute(query, {'user_id': user_id, 'book_isbn': isbn, 'rating': rating, 'content': content, 'created_on': created_on})
+        db.commit()
+        flash('Your review was successfully added!', 'success')
+        return redirect(url_for('book_detail.book_detail', isbn=isbn))
+    else:
+        # If the form is invalid, re-render the book detail page with the form errors
+        #book_details = get_book_by_isbn(book_isbn)  # Fetch book again for re-rendering the page
+        #return render_template('book_detail.html', book=book_details, reviews=..., review_form=form)
+        flash('Invalid Form')
+        return redirect(url_for('book_detail.book_detail', isbn=isbn))
 
-        return redirect(url_for('book_detail', isbn=isbn))
 
-    return redirect(url_for('login'))
 
 # No need for teardown function as SQLAlchemy manages connections
+app.register_blueprint(bp)
 
 if __name__ == '__main__':
     app.run(debug=True)
