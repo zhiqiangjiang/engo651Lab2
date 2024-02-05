@@ -5,7 +5,7 @@ from sqlalchemy import create_engine,Column, Integer, String, DateTime, MetaData
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from datetime import datetime
 from sqlalchemy.ext.declarative import declarative_base
-from flask import Flask, render_template, request, session, redirect, url_for, flash, Blueprint
+from flask import Flask, render_template, request, session, redirect, url_for, flash, Blueprint, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from forms import RegistrationForm, LoginForm, SearchForm, ReviewForm
 from sqlalchemy.exc import IntegrityError
@@ -201,11 +201,46 @@ def book_detail(isbn):
     book_result = db.execute(book_query, {'isbn': isbn}).fetchone()
 
     # Check if book exists
-    # if book_result is None:
-    #     abort(404)
+    if book_result is None:
+         abort(404)
 
-    book_details = {'isbn': book_result[0], 'title': book_result[1], 'author': book_result[2], 'year':book_result[3]}
+    import requests
+    # Define the base URL for the Google Books API
+    base_url = "https://www.googleapis.com/books/v1/volumes"
+
+    # Add the ISBN as a search term
+    params = {
+        'q': f'isbn:{isbn}',
+        'key': 'AIzaSyAu0x1QxQgJwm75g1RHk3P-KaHBpHKp4i0', 
+    }
+
+    book_data = {}
+    try:
+        # Make the GET request
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+
+        # Parse the JSON data
+        book_data = response.json()
+    except requests.exceptions.HTTPError as error:
+        print(f"HTTP error occurred: {error}")
+        #return render_template('book_detail.html', book=book_result, reviews=reviews,review_form=review_form)
+   
+    book_info = None
+    average_rating = 0
+    ratingsCount = 0
+
+    if book_data['items']:
+        book_info = book_data['items'][0]
+        average_rating = book_info['volumeInfo'].get('averageRating')
+        ratingsCount = book_info['volumeInfo'].get('ratingsCount')  
+        #print(f"avrating: {average_rating}")
+    else:
+        flash("Book Not Found From Google BookAPI.") 
     
+
+    book_details = {'isbn': book_result[0], 'title': book_result[1], 'author': book_result[2], 'year':book_result[3], 'average_rating':average_rating, 'ratingsCount':ratingsCount}
+
     # Instantiate the ReviewForm
     review_form = ReviewForm()
 
@@ -217,7 +252,6 @@ def book_detail(isbn):
         WHERE book_isbn = :isbn
     """)
     reviews_result = db.execute(reviews_query, {'isbn': isbn}).fetchall()
-
     reviews = [{'rating':row[0],'content':row[1]} for row in reviews_result]
 
     return render_template('book_detail.html', book=book_details, reviews=reviews,review_form=review_form)

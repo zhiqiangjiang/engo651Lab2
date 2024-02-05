@@ -4,8 +4,9 @@
 <p><strong>Author:</strong> {{ book.author }}</p>
 <p><strong>Publication Year:</strong> {{ book.year }}</p>
 <p><strong>ISBN:</strong> {{ book.isbn }}</p>
-
-<h2>Reviews</h2>
+<p><strong>Google Books Average Rating:</strong> {{ book.average_rating }}</p>
+<p><strong>Google Books Number of Ratings:</strong> {{ book.ratingsCount }}</p>
+<h2>Reviews From Database</h2>
 <table class="review-table">
     <thead>
         <tr>
