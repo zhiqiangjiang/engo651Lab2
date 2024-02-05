@@ -235,6 +235,16 @@ def add_review(isbn):
         content = request.form['content']
         # Get the current timestamp
         created_on = datetime.now()
+
+        # Check if the user has already reviewed this book using raw SQL
+        query = text("""
+        SELECT 1 FROM reviews WHERE user_id = :user_id AND book_isbn = :book_isbn LIMIT 1; """)
+        result = db.execute(query, {'user_id': user_id, 'book_isbn': isbn})
+
+        if result.fetchone():  # If there's any row returned, the user has already reviewed this book
+            flash('You have already reviewed this book.', 'error')
+            return redirect(url_for('book_detail.book_detail', isbn=isbn))
+        
         # Insert review into Reviews table (assuming it has user_id, isbn, rating, comment columns)
         query = text("""
         INSERT INTO reviews (user_id, book_isbn, rating, content, created_on)
