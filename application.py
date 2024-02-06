@@ -5,7 +5,7 @@ from sqlalchemy import create_engine,Column, Integer, String, DateTime, MetaData
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from datetime import datetime
 from sqlalchemy.ext.declarative import declarative_base
-from flask import Flask, render_template, request, session, redirect, url_for, flash, Blueprint, abort
+from flask import Flask, render_template, request, session, redirect, url_for, flash, Blueprint, abort, jsonify
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from forms import RegistrationForm, LoginForm, SearchForm, ReviewForm
 from sqlalchemy.exc import IntegrityError
@@ -186,7 +186,28 @@ def search():
 
     return render_template('search.html', form=form)
 
+def fetch_book_data_google_books_api(isbn):
+    import requests
+    # Define the base URL for the Google Books API
+    base_url = "https://www.googleapis.com/books/v1/volumes"
 
+    # Add the ISBN as a search term
+    params = {
+        'q': f'isbn:{isbn}',
+        'key': 'AIzaSyAu0x1QxQgJwm75g1RHk3P-KaHBpHKp4i0', 
+    }
+
+    try:
+        # Make the GET request
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+
+        # Parse the JSON data
+        book_data = response.json()
+        return book_data
+    except requests.exceptions.HTTPError as error:
+        print(f"HTTP error occurred: {error}")
+        return None
 
 # Book detail route
 bp = Blueprint('book_detail', __name__)
@@ -204,28 +225,11 @@ def book_detail(isbn):
     if book_result is None:
          abort(404)
 
-    import requests
-    # Define the base URL for the Google Books API
-    base_url = "https://www.googleapis.com/books/v1/volumes"
+    # Fetch book data from the Google Books API   
+    book_data = fetch_book_data_google_books_api(isbn)
+    if not book_data:
+        flash("Book Not Found From Google BookAPI.") 
 
-    # Add the ISBN as a search term
-    params = {
-        'q': f'isbn:{isbn}',
-        'key': 'AIzaSyAu0x1QxQgJwm75g1RHk3P-KaHBpHKp4i0', 
-    }
-
-    book_data = {}
-    try:
-        # Make the GET request
-        response = requests.get(base_url, params=params)
-        response.raise_for_status()
-
-        # Parse the JSON data
-        book_data = response.json()
-    except requests.exceptions.HTTPError as error:
-        print(f"HTTP error occurred: {error}")
-        #return render_template('book_detail.html', book=book_result, reviews=reviews,review_form=review_form)
-   
     book_info = None
     average_rating = 0
     ratingsCount = 0
@@ -235,9 +239,7 @@ def book_detail(isbn):
         average_rating = book_info['volumeInfo'].get('averageRating')
         ratingsCount = book_info['volumeInfo'].get('ratingsCount')  
         #print(f"avrating: {average_rating}")
-    else:
-        flash("Book Not Found From Google BookAPI.") 
-    
+
 
     book_details = {'isbn': book_result[0], 'title': book_result[1], 'author': book_result[2], 'year':book_result[3], 'average_rating':average_rating, 'ratingsCount':ratingsCount}
 
@@ -296,6 +298,75 @@ def add_review(isbn):
         return redirect(url_for('book_detail.book_detail', isbn=isbn))
 
 
+#website json api
+@app.route('/api/<string:isbn>', methods=['GET'])
+def api_book_detail(isbn):
+    # Fetch book data from the Google Books API
+    book_data = fetch_book_data_google_books_api(isbn) 
+    if not book_data:
+        return jsonify({"error": "Book not found"}), 404
+    
+    # Process the fetched data into the desired format
+    title = book_data.get('volumeInfo', {}).get('title')
+    author = ', '.join([a['name'] for a in book_data.get('volumeInfo', {}).get('authors', [])])  # Assuming authors are provided as a list
+    published_date = book_data.get('volumeInfo', {}).get('publishedDate')
+
+    isbn_10 = None
+    isbn_13 = None
+    identifiers = book_data.get('volumeInfo', {}).get('industryIdentifiers', [])
+    for identifier in identifiers:
+        if identifier['type'] == 'ISBN_10':
+            isbn_10 = identifier['identifier']
+        elif identifier['type'] == 'ISBN_13':
+            isbn_13 = identifier['identifier']
+
+    # Query for book reviews
+    reviews_query = text("""
+        SELECT rating
+        FROM reviews
+        WHERE book_isbn = :isbn
+    """)
+    reviews_result = db.execute(reviews_query, {'isbn': isbn}).fetchall()
+    if not reviews_result:
+        reviews_result = []
+
+    reviews = [{'rating':row[0]} for row in reviews_result]
+    # calculate the final review_count and average rating
+    total_google_score = 0
+    if book_data['items']:
+        book_info = book_data['items'][0]
+        average_rating = book_info['volumeInfo'].get('averageRating')
+        ratingsCount = book_info['volumeInfo'].get('ratingsCount')  
+        print(f"ratingsCount: {ratingsCount}")
+        print(f"averageRating: {average_rating}")
+        if not average_rating:
+            average_rating = 0
+        if not ratingsCount:
+            ratingsCount = 0
+        total_google_score = ratingsCount * average_rating
+    total_db_score = sum([review['rating'] for review in reviews])
+    total_score = total_google_score + total_db_score
+    review_count = None
+    if not (book_data.get('volumeInfo', {}).get('ratingsCount')):
+        review_count = len(reviews)
+    else:
+        review_count = len(reviews)+book_data.get('volumeInfo', {}).get('ratingsCount')
+
+    average_rating = None
+    if review_count>0:
+        average_rating = total_score / review_count
+
+    response_data = {
+        "title": title,
+        "author": author,
+        "publishedDate": published_date,
+        "ISBN_10": isbn_10,
+        "ISBN_13": isbn_13,
+        "reviewCount": review_count,
+        "averageRating": average_rating
+    }
+
+    return jsonify(response_data)
 
 # No need for teardown function as SQLAlchemy manages connections
 app.register_blueprint(bp)
