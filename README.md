@@ -5,7 +5,7 @@ This project is a Flask-based web application for users to browse books, post re
 File Structure & Explanation:
 * application.py: the main entry point of the application, where Flask routes are defined and implemented. User review can be submitted. And Users cannot submit multiple reviews for the same book. 
 Book detail page would display the book's average rating and number of ratings from Google Book API inquiry. 
-Website API is implemented for a GET request to http://127.0.0.1:5000/api/<isbn> route.The website would return only a JSON response containing the book’s title, author, published date, ISBN (both ISBN_10 and ISBN_13 types), review count, and the average rating.
+Website API is implemented for a GET request to http://127.0.0.1:5000/api/isbn route.The website would return only a JSON response containing the book’s title, author, published date, ISBN (both ISBN_10 and ISBN_13 types), review count, and the average rating.
 * import.py: define and create required database tables. import the books from csv into database.
 * forms.py: contains the Flask-WTF form classes used throughout the application.
 * templates/base.html: The base template providing common layout and styles.
