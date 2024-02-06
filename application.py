@@ -190,7 +190,7 @@ def fetch_book_data_google_books_api(isbn):
     import requests
     # Define the base URL for the Google Books API
     base_url = "https://www.googleapis.com/books/v1/volumes"
-
+    #print(f"isbn: {isbn}")
     # Add the ISBN as a search term
     params = {
         'q': f'isbn:{isbn}',
@@ -204,6 +204,8 @@ def fetch_book_data_google_books_api(isbn):
 
         # Parse the JSON data
         book_data = response.json()
+        #print(f"book_data: {book_data}")
+
         return book_data
     except requests.exceptions.HTTPError as error:
         print(f"HTTP error occurred: {error}")
@@ -303,22 +305,10 @@ def add_review(isbn):
 def api_book_detail(isbn):
     # Fetch book data from the Google Books API
     book_data = fetch_book_data_google_books_api(isbn) 
-    if not book_data:
-        return jsonify({"error": "Book not found"}), 404
     
-    # Process the fetched data into the desired format
-    title = book_data.get('volumeInfo', {}).get('title')
-    author = ', '.join([a['name'] for a in book_data.get('volumeInfo', {}).get('authors', [])])  # Assuming authors are provided as a list
-    published_date = book_data.get('volumeInfo', {}).get('publishedDate')
-
-    isbn_10 = None
-    isbn_13 = None
-    identifiers = book_data.get('volumeInfo', {}).get('industryIdentifiers', [])
-    for identifier in identifiers:
-        if identifier['type'] == 'ISBN_10':
-            isbn_10 = identifier['identifier']
-        elif identifier['type'] == 'ISBN_13':
-            isbn_13 = identifier['identifier']
+    if not book_data or 'items' not in book_data:
+        return jsonify({"error": "Book not found"}), 404
+   
 
     # Query for book reviews
     reviews_query = text("""
@@ -331,41 +321,73 @@ def api_book_detail(isbn):
         reviews_result = []
 
     reviews = [{'rating':row[0]} for row in reviews_result]
-    # calculate the final review_count and average rating
-    total_google_score = 0
+   
+    response_data = {
+            "title": None,
+            "author": None,
+            "publishedDate": None,
+            "ISBN_10": None,
+            "ISBN_13": None,
+            "reviewCount": None,
+            "averageRating": None
+        }
     if book_data['items']:
+         # Process the fetched data into the desired format
+        #print(f"book_data: {book_data}")
         book_info = book_data['items'][0]
+        title = book_info['volumeInfo'].get('title')
+        #print(f"title: {title}")
+
+        authors_data = book_info['volumeInfo'].get('authors', [])
+        #print(f"authors_data: {authors_data}")
+        author=None
+        if authors_data:
+            author = ', '.join(authors_data)
+       
+        #print(f"author: {author}")
+        #author = ', '.join([a['name'] for a in book_info['volumeInfo'].get('authors', [])])  # Assuming authors are provided as a list
+        published_date = book_info['volumeInfo'].get('publishedDate')
+        
+        isbn_10 = None
+        isbn_13 = None
+        identifiers = book_info['volumeInfo'].get('industryIdentifiers', [])
+        for identifier in identifiers:
+            if identifier['type'] == 'ISBN_10':
+                isbn_10 = identifier['identifier']
+            elif identifier['type'] == 'ISBN_13':
+                isbn_13 = identifier['identifier']
+        
         average_rating = book_info['volumeInfo'].get('averageRating')
         ratingsCount = book_info['volumeInfo'].get('ratingsCount')  
-        print(f"ratingsCount: {ratingsCount}")
-        print(f"averageRating: {average_rating}")
+        #print(f"ratingsCount: {ratingsCount}")
+        #print(f"averageRating: {average_rating}")
         if not average_rating:
             average_rating = 0
         if not ratingsCount:
             ratingsCount = 0
+        
+        # calculate the final review_count and average rating
         total_google_score = ratingsCount * average_rating
-    total_db_score = sum([review['rating'] for review in reviews])
-    total_score = total_google_score + total_db_score
-    review_count = None
-    if not (book_data.get('volumeInfo', {}).get('ratingsCount')):
-        review_count = len(reviews)
-    else:
-        review_count = len(reviews)+book_data.get('volumeInfo', {}).get('ratingsCount')
+        total_db_score = sum([review['rating'] for review in reviews])
+        total_score = total_google_score + total_db_score
+        review_count = len(reviews)+ratingsCount
+        
+        average_rating = None
+        if review_count>0:
+            average_rating = round(total_score / review_count,1)
+        else:
+            review_count=None
 
-    average_rating = None
-    if review_count>0:
-        average_rating = total_score / review_count
-
-    response_data = {
-        "title": title,
-        "author": author,
-        "publishedDate": published_date,
-        "ISBN_10": isbn_10,
-        "ISBN_13": isbn_13,
-        "reviewCount": review_count,
-        "averageRating": average_rating
-    }
-
+        response_data = {
+            "title": title,
+            "author": author,
+            "publishedDate": published_date,
+            "ISBN_10": isbn_10,
+            "ISBN_13": isbn_13,
+            "reviewCount": review_count,
+            "averageRating": average_rating
+        }
+    #print(f"response_data: {response_data}")
     return jsonify(response_data)
 
 # No need for teardown function as SQLAlchemy manages connections
